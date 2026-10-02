@@ -45,6 +45,10 @@ const userSchema = new mongoose.Schema(
         return ['teacher', 'student'].includes(this.role);
       },
     },
+    subjectId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subject',
+    },
   },
   {
     timestamps: true,
