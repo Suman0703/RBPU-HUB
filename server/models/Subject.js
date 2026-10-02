@@ -11,7 +11,17 @@ const subjectSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    departmentId: {
+    type: {
+      type: String,
+      enum: ['theory', 'lab'],
+      required: true,
+    },
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Class',
+      required: true,
+    },
+    owningDepartmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Department',
       required: true,
@@ -19,10 +29,6 @@ const subjectSchema = new mongoose.Schema(
     teacherId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-    },
-    credits: {
-      type: Number,
-      required: true,
     },
   },
   {

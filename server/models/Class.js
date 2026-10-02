@@ -11,9 +11,11 @@ const classSchema = new mongoose.Schema(
       ref: 'Department',
       required: true,
     },
-    year: {
-      type: String,
+    currentSemester: {
+      type: Number,
       required: true,
+      min: 1,
+      max: 8,
     },
   },
   {

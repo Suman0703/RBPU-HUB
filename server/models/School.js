@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const departmentSchema = new mongoose.Schema(
+const schoolSchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -11,14 +11,10 @@ const departmentSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    schoolId: {
+    universityId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'School',
+      ref: 'University',
       required: true,
-    },
-    hodUserId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
     },
   },
   {
@@ -26,4 +22,4 @@ const departmentSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('Department', departmentSchema);
+module.exports = mongoose.model('School', schoolSchema);
