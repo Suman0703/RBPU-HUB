@@ -1,25 +1,39 @@
-import React, { useContext } from 'react';
-import { Navigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { Navigate, useLocation } from 'react-router-dom'
+import useAuth from '../context/useAuth'
+import { getDashboardPath, getDashboardRole } from '../utils/dashboardPath'
 
-export default function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useContext(AuthContext);
+function ProtectedRoute({ children, allowedRoles = [], allowFirstLogin = false }) {
+  const { user, loading } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-medium text-gray-600 animate-pulse">Loading session...</div>
-      </div>
-    );
+      <main className="flex min-h-screen items-center justify-center text-slate-600">
+        Loading your account...
+      </main>
+    )
   }
 
   if (!user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
+  if (
+    allowedRoles.length > 0 &&
+    !allowedRoles.includes(getDashboardRole(user))
+  ) {
+    return <Navigate to="/unauthorized" replace />
   }
 
-  return children;
+  if (user.role === 'superadmin' && user.isFirstLogin && !allowFirstLogin) {
+    return <Navigate to="/change-password" replace />
+  }
+
+  if (user.role === 'superadmin' && !user.isFirstLogin && allowFirstLogin) {
+    return <Navigate to={getDashboardPath(user)} replace />
+  }
+
+  return children
 }
+
+export default ProtectedRoute

@@ -1,29 +1,26 @@
-const mongoose = require('mongoose');
+const mongoose = require('mongoose')
 
+// Stores a university department and its head of department.
 const departmentSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: true,
+      trim: true,
     },
     code: {
       type: String,
       required: true,
       unique: true,
+      uppercase: true,
+      trim: true,
     },
-    schoolId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'School',
-      required: true,
-    },
-    hodUserId: {
+    hod: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
   },
-  {
-    timestamps: true,
-  }
-);
+  { timestamps: true },
+)
 
-module.exports = mongoose.model('Department', departmentSchema);
+module.exports = mongoose.model('Department', departmentSchema)

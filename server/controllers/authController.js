@@ -1,76 +1,155 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const jwt = require('jsonwebtoken')
+const User = require('../models/User')
+const Class = require('../models/Class')
+const { getStudentAcademicProgress } = require('../utils/studentAcademic')
+const { synchronizeStudentPlacement } = require('../utils/studentPlacement')
 
-exports.login = async (req, res, next) => {
+async function getUserInfo(user) {
+  if (user.role === 'student') {
+    await synchronizeStudentPlacement(user)
+  }
+
+  const isClassAdvisor =
+    user.role === 'teacher' &&
+    Boolean(await Class.exists({ advisor: user._id }))
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    department: user.department,
+    class: user.class,
+    section: user.section,
+    rollNo: user.rollNo,
+    isFirstLogin: user.isFirstLogin,
+    isActive: user.isActive,
+    isClassAdvisor,
+    ...(user.role === 'student'
+      ? {
+          startingYear: user.startingYear,
+          ...getStudentAcademicProgress(user.startingYear),
+          studentProfile: user.studentProfile
+            ? user.studentProfile.toObject()
+            : {},
+        }
+      : {}),
+  }
+}
+
+async function login(req, res, next) {
   try {
-    const { email, rollNo, password } = req.body;
-
-    if (!password) {
-      return res.status(400).json({ message: 'Password is required' });
-    }
-    if (!email && !rollNo) {
-      return res.status(400).json({ message: 'Email or Roll No is required' });
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: 'Authentication is not configured.' })
     }
 
-    // Find the user by email or rollNo
-    const query = email ? { email } : { rollNo };
-    const user = await User.findOne(query);
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+    const email = req.body.email.toLowerCase()
+    const user = await User.findOne({ email }).select('+password')
+
+    if (
+      !user ||
+      !user.isActive ||
+      !(await user.comparePassword(req.body.password))
+    ) {
+      return res.status(401).json({ message: 'Email or password is incorrect.' })
     }
 
-    // Compare the password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    const token = jwt.sign(
+      { sub: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' },
+    )
 
-    // Sign JWT
-    const payload = {
-      userId: user._id,
-      role: user.role,
-      departmentId: user.departmentId,
-      classId: user.classId,
-    };
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET || 'fallback_secret', {
-      expiresIn: '1d', // Token expires in 1 day
-    });
-
-    // Short profile object (excluding password)
-    const profile = {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      rollNo: user.rollNo,
-      role: user.role,
-      departmentId: user.departmentId,
-      classId: user.classId,
-    };
-
-    res.status(200).json({
-      message: 'Login successful',
+    return res.json({
       token,
-      user: profile,
-    });
+      user: await getUserInfo(user),
+    })
   } catch (error) {
-    next(error);
+    next(error)
   }
-};
+}
 
-exports.getMe = async (req, res, next) => {
+async function getMe(req, res, next) {
   try {
-    // req.user is set by the authenticate middleware
-    const user = await User.findById(req.user.userId).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    return res.json({ user: await getUserInfo(req.user) })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function updateStudentProfile(req, res, next) {
+  try {
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ message: 'Only students can update student profile details.' })
     }
 
-    res.status(200).json({
-      user,
-    });
+    const fields = [
+      'mobileNumber',
+      'dateOfBirth',
+      'currentAddress',
+      'permanentAddress',
+      'fatherName',
+      'motherName',
+      'guardianName',
+      'guardianPhone',
+      'bloodGroup',
+      'class10Board',
+      'class10Percentage',
+      'class12Board',
+      'class12Percentage',
+      'favoriteSports',
+      'hobbies',
+    ]
+    const studentProfile = req.user.studentProfile?.toObject() || {}
+
+    fields.forEach((field) => {
+      if (Object.hasOwn(req.body.studentProfile, field)) {
+        const value = req.body.studentProfile[field]
+        studentProfile[field] = value === '' || value === null ? undefined : value
+      }
+    })
+
+    req.user.studentProfile = studentProfile
+    await req.user.save()
+
+    return res.json({
+      message: 'Student profile updated successfully.',
+      user: await getUserInfo(req.user),
+    })
   } catch (error) {
-    next(error);
+    return next(error)
   }
-};
+}
+
+async function changePassword(req, res, next) {
+  try {
+    const user = await User.findById(req.user.id).select('+password')
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: 'The account is unavailable.' })
+    }
+
+    const passwordMatches = await user.comparePassword(
+      req.body.currentPassword,
+    )
+
+    if (!passwordMatches) {
+      return res.status(400).json({
+        message: 'The current password is incorrect.',
+      })
+    }
+
+    user.password = req.body.newPassword
+    user.isFirstLogin = false
+    await user.save()
+
+    return res.json({
+      message: 'Password changed successfully.',
+      user: await getUserInfo(user),
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+module.exports = { login, getMe, updateStudentProfile, changePassword }
