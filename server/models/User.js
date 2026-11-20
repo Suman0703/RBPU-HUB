@@ -1,77 +1,153 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose')
+const bcrypt = require('bcryptjs')
 
+const semesterFeeSchema = new mongoose.Schema(
+  {
+    semester: { type: Number, required: true, min: 1, max: 8 },
+    academicPaid: { type: Number, default: 0, min: 0 },
+    hostelPaid: { type: Number, default: 0, min: 0 },
+    transportationPaid: { type: Number, default: 0, min: 0 },
+    examPaid: { type: Number, default: 0, min: 0 },
+    assessedAcademic: { type: Number, min: 0 },
+    assessedHostel: { type: Number, min: 0 },
+    assessedTransportation: { type: Number, min: 0 },
+    assessedExam: { type: Number, min: 0 },
+  },
+  { _id: false },
+)
+
+// Stores login details and the user's place in the university.
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: true,
+      trim: true,
     },
     email: {
       type: String,
-      required: function () { return this.role !== 'student'; },
+      required: true,
       unique: true,
-      sparse: true,
       lowercase: true,
-      trim: true,
-    },
-    rollNo: {
-      type: String,
-      required: function () { return this.role === 'student'; },
-      unique: true,
-      sparse: true,
       trim: true,
     },
     password: {
       type: String,
       required: true,
+      select: false,
     },
     role: {
       type: String,
-      enum: ['admin', 'principal', 'hod', 'teacher', 'student'],
+      enum: ['superadmin', 'teacher', 'student', 'placementAdmin'],
       required: true,
     },
-    departmentId: {
+    department: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Department',
-      required: function () {
-        return ['hod', 'teacher', 'student'].includes(this.role);
-      },
     },
-    classId: {
+    class: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Class',
-      required: function () {
-        return ['teacher', 'student'].includes(this.role);
-      },
     },
-    subjectId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Subject',
+    program: {
+      type: String,
+      enum: ['', 'CSE', 'IT', 'ME', 'CE'],
+      default: '',
+    },
+    startingYear: {
+      type: Number,
+      min: 2000,
+      max: 2100,
+    },
+    section: {
+      type: String,
+      trim: true,
+    },
+    rollNo: {
+      type: String,
+      trim: true,
+    },
+    studentProfile: {
+      gender: {
+        type: String,
+        enum: ['', 'male', 'female'],
+        default: '',
+      },
+      mobileNumber: { type: String, trim: true, maxlength: 20 },
+      dateOfBirth: { type: Date },
+      currentAddress: { type: String, trim: true, maxlength: 500 },
+      permanentAddress: { type: String, trim: true, maxlength: 500 },
+      fatherName: { type: String, trim: true, maxlength: 100 },
+      motherName: { type: String, trim: true, maxlength: 100 },
+      guardianName: { type: String, trim: true, maxlength: 100 },
+      guardianPhone: { type: String, trim: true, maxlength: 20 },
+      bloodGroup: {
+        type: String,
+        enum: ['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+      },
+      class10Board: { type: String, trim: true, maxlength: 100 },
+      class10Percentage: { type: Number, min: 0, max: 100 },
+      class12Board: { type: String, trim: true, maxlength: 100 },
+      class12Percentage: { type: Number, min: 0, max: 100 },
+      favoriteSports: { type: String, trim: true, maxlength: 200 },
+      hobbies: { type: String, trim: true, maxlength: 200 },
+    },
+    studentServices: {
+      hostel: {
+        type: String,
+        enum: ['', 'girls-hostel-a', 'girls-hostel-b', 'boys-hostel-a', 'boys-hostel-b'],
+        default: '',
+      },
+      hostelRoom: { type: String, trim: true, maxlength: 30, default: '' },
+      usesTransport: { type: Boolean, default: false },
+      semesterFees: { type: [semesterFeeSchema], default: [] },
+    },
+    isFirstLogin: {
+      type: Boolean,
+      default: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    availability: {
+      type: [String],
+      default: [],
+    },
+    maxLecturesPerDay: {
+      type: Number,
+      min: 1,
+      max: 12,
+      default: 6,
+    },
+    maxLecturesPerWeek: {
+      type: Number,
+      min: 1,
+      max: 40,
+      default: 20,
     },
   },
-  {
-    timestamps: true,
-  }
-);
+  { timestamps: true },
+)
 
-// Pre-save hook to hash password
+// Hash a new or changed password before saving the user.
 userSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
-
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-  } catch (error) {
-    throw error;
+  if (!this.isModified('password')) {
+    return
   }
-});
 
-// Method to compare passwords
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
+  this.password = await bcrypt.hash(this.password, 12)
+})
 
-const User = mongoose.model('User', userSchema);
+userSchema.methods.comparePassword = function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password)
+}
 
-module.exports = User;
+userSchema.set('toJSON', {
+  transform: (doc, returnedUser) => {
+    delete returnedUser.password
+    return returnedUser
+  },
+})
+
+module.exports = mongoose.model('User', userSchema)

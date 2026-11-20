@@ -1,79 +1,80 @@
-import React, { createContext, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import api, { TOKEN_KEY } from '../services/api'
+import AuthContext from './authContextValue'
 
-export const AuthContext = createContext();
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(() =>
+    Boolean(localStorage.getItem(TOKEN_KEY)),
+  )
 
   useEffect(() => {
-    const loadUser = async () => {
-      if (token) {
-        try {
-          const res = await fetch('/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setUser(data.user);
-          } else {
-            setToken(null);
-            setUser(null);
-            localStorage.removeItem('token');
-          }
-        } catch (error) {
-          console.error("Failed to load user session", error);
-          setToken(null);
-          setUser(null);
-          localStorage.removeItem('token');
+    let active = true
+    const token = localStorage.getItem(TOKEN_KEY)
+
+    if (!token) {
+      return undefined
+    }
+
+    async function loadUser() {
+      try {
+        const response = await api.get('/auth/me')
+        if (active) {
+          setUser(response.data.user)
+        }
+      } catch (error) {
+        if (error.response?.status === 401) {
+          localStorage.removeItem(TOKEN_KEY)
+        } else {
+          toast.error('Unable to verify your session. Please try again.')
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
         }
       }
-      setLoading(false);
-    };
-
-    loadUser();
-  }, [token]);
-
-  const login = async (email, password) => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        setToken(data.token);
-        setUser(data.user);
-        localStorage.setItem('token', data.token);
-        return { success: true, user: data.user };
-      } else {
-        return { success: false, message: data.message || 'Login failed' };
-      }
-    } catch (error) {
-      return { success: false, message: 'Server error. Please try again later.' };
     }
-  };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    navigate('/');
-  };
+    loadUser()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function login(email, password) {
+    const response = await api.post('/auth/login', { email, password })
+    localStorage.setItem(TOKEN_KEY, response.data.token)
+    setUser(response.data.user)
+    return response.data.user
+  }
+
+  async function changePassword(currentPassword, newPassword) {
+    const response = await api.put('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    })
+    setUser(response.data.user)
+    return response.data.user
+  }
+
+  async function updateStudentProfile(studentProfile) {
+    const response = await api.patch('/auth/profile', { studentProfile })
+    setUser(response.data.user)
+    return response.data.user
+  }
+
+  function logout() {
+    localStorage.removeItem(TOKEN_KEY)
+    setUser(null)
+  }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, login, logout, changePassword, updateStudentProfile, loading }}
+    >
       {children}
     </AuthContext.Provider>
-  );
-};
+  )
+}
